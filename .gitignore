@@ -3,6 +3,13 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+#Ignore OpenGL library files
+lib/
+
+# Personal files
+Tutorial/
+Submission/
+
 # User-specific files
 *.rsuser
 *.suo
