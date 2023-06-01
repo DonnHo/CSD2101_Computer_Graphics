@@ -19,7 +19,7 @@ fragment shader. That is why every fragment of the triangle primitive
 rendered by an object has the same color
 */
 
-unitform vec3 uColor;
+uniform vec3 uColor;
 
 layout (location=0) out vec4 fFragColor;
 

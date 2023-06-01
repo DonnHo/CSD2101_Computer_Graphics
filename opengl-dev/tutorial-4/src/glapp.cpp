@@ -89,7 +89,6 @@ void GLApp::init()
 */
 void GLApp::update() 
 {
-		glClearColor(1.f, 1.f, 1.f, 1.f);
 		
 		// update camera
 		GLApp::camera2d.update(GLHelper::ptr_window);
@@ -482,14 +481,9 @@ void GLApp::GLObject::update(GLdouble delta_time)
 		position.x, position.y, 1.f
 	};
 
-	glm::mat3 modelMat{
-		1.f/5000.f, 0.f, 0.f,
-		0.f, 1.f/5000.f, 0.f,
-		0.f, 0.f, 1.f
-	};
+	mdl_xform = transMat * (rotMat * scaleMat);
 
-	// matrix to map geometry from model to world to NDC coordinates
-	mdl_to_ndc_xform = modelMat * (transMat * (rotMat * scaleMat));
+	mdl_to_ndc_xform = camera2d.world_to_ndc_xform * mdl_xform;
 }
 
 // HEADER***

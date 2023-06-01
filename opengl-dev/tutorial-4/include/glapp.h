@@ -23,6 +23,7 @@
 /*                                                                   includes
 ----------------------------------------------------------------------------- */
 #include <glslshader.h>
+#include <glhelper.h>
 #include <string>
 #include <vector>
 #include <list>
