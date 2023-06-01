@@ -43,8 +43,9 @@ struct GLApp {
 	  GLuint vaoid; // handle to VAO
 	  GLuint draw_cnt; // number of time draw calls made
 
-	  void init(); // read mesh data from file
-	  void release(); // return buffers back to GPU
+	  // didnt add
+	  //void init(); // read mesh data from file
+	  //void release(); // return buffers back to GPU
   };
 
   // tutorial 3 - encapsulates state required to update
@@ -68,7 +69,7 @@ struct GLApp {
 	  std::map<std::string, GLApp::GLModel>::iterator mdl_ref;
 
 	  // reference to shader program used to render the model
-	  std::map<std::string, GLApp::GLModel>::iterator shd_ref;
+	  std::map<std::string, GLSLShader>::iterator shd_ref;
 
 	  // static data member to keep track of object count
 	  static std::vector<GLuint> objCount;
@@ -86,6 +87,41 @@ struct GLApp {
 	  // function to update the object's model transformation matrix
 	  void update(GLdouble delta_time);
   };
+
+  struct Camera2D {
+	  GLObject* pgo; // pointer to game object with camera
+	  glm::vec2 right, up; // camera orientation vectors
+	  glm::mat3 view_xform, camwin_to_ndc_xform, world_to_ndc_xform;
+
+	  // additional parameters
+	  GLint height{ 1000 };
+	  GLfloat ar;
+
+	  // window change parameters
+	  GLint min_height{ 500 }, max_height{ 2000 };
+
+	  // height is increasing if 1 and decreasing if -1
+	  GLint height_chg_dir{ 1 };
+
+	  // increments by which window height is changed per z key press
+	  GLint height_chg_val{ 5 };
+
+	  // camera's speed when button U is pressed
+	  GLfloat linear_speed{ 2.f };
+
+	  // keyboard button press flags
+	  GLboolean camtype_flag{ GL_FALSE };    // button V
+	  GLboolean zoom_flag{ GL_FALSE };		 // button Z
+	  GLboolean left_turn_flag{ GL_FALSE };	 // button H
+	  GLboolean right_turn_flag{ GL_FALSE }; // button K
+	  GLboolean move_flag{ GL_FALSE };		 // button U
+
+	  // implement if needed
+	  void init(GLFWwindow* pWindow, GLObject* ptr);
+	  void update(GLFWwindow*);
+  };
+
+  static Camera2D camera2d;
 
   // stores <object name, object data>
   static std::map<std::string, GLObject> objects; // singleton, stores instanced objects data

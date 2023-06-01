@@ -32,32 +32,7 @@ std::map<std::string, GLSLShader> GLApp::shdrpgms{};
 
 // static variables
 std::vector<GLuint> GLApp::GLObject::objCount(2); // count of box_model and mystery_model
-
-// file scope
-std::random_device rd; // random device for seed
-std::default_random_engine gen(rd()); // seeded random engine
-
-// get uniformed distribution from [-1,1]
-std::uniform_real_distribution<float> urdf(-1.f,
-	std::nextafter(1.f, std::numeric_limits<float>::max()));
-
-/*  _________________________________________________________________________ */
-/*! randColor
- * @brief Generate a random color.
- *
- * This function generates a random color by generating random values for the
- * red, green, and blue components in the range [0, 1]. The random values are
- * generated using a uniform distribution.
- *
- * @param none
- * @return A random color represented as a glm::vec3 object.
-*/
-glm::vec3 randColor()
-{
-	return glm::vec3{ (urdf(gen) + 1.f) / 2.f,
-					  (urdf(gen) + 1.f) / 2.f,
-					  (urdf(gen) + 1.f) / 2.f };
-}
+GLApp::Camera2D GLApp::camera2d{};
 
 /*  _________________________________________________________________________ */
 /*! GLApp::init
@@ -89,20 +64,11 @@ void GLApp::init()
 	// type GLObject in container GLApp::objects
 	GLApp::init_scene("../scenes/tutorial-4.scn");
 
-	GLApp::VPSS shdr_files_names{
-		std::make_pair<std::string, std::string>
-		("../shaders/my-tutorial-3.vert", "../shaders/my-tutorial-3.frag")
-	};
+	// Part 4: initialize camera
+	GLApp::camera2d.init(GLHelper::ptr_window,
+						 &GLApp::objects.at("Camera"));
 
-	// create shader program from shader files in vector shdr_file_names
-	// and insert each shader program into the container GLApp::shdrpgms
-	GLApp::init_shdrpgms_cont(shdr_files_names);
-
-	// Part 4: create different geometries and insert them into
-	// repositor container GLApp::models
-	GLApp::init_models_cont();
-
-	// GLApp::objects empty since simulation begins with no objects displayed
+	// Part 5: Print OpenGL context and GPU specs
 }
 
 /*  _________________________________________________________________________ */
@@ -123,106 +89,21 @@ void GLApp::init()
 */
 void GLApp::update() 
 {
-
-	glClearColor(1.f, 1.f, 1.f, 1.f);
-
-	// Part 1: Update polygon rasterization mode ...
-	// Check if key 'P' is pressed
-	// If pressed, update polygon rasterization mode
-
-	static GLuint rasterMode{ 0 };
-	if (GLHelper::keystateP == GL_TRUE)
-	{
-		switch (rasterMode)
-		{
-		case 0:
-			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-			break;
-		case 1:
-			glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
-			break;
-		case 2:
-			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-			break;
-		}
-		rasterMode = ++rasterMode % 3;
-		GLHelper::keystateP = GL_FALSE;
-	}
-
-	// Part 2: Spawn or kill objects ...
-	// Check if left mouse button is pressed
-	// If maximum object limit is not reached, spawn new object(s)
-	// Otherwise, kill oldest objects
-	size_t maxLimit{ 32678 };
-	size_t minLimit{ 1 };
-	static GLboolean spawn{ GL_TRUE };
-
-	if (GLHelper::leftclickState == GL_TRUE)
-	{
-		// if spawn is true
-		if (spawn)
-		{
-			// set spawn to false if maxLimit is reached
-			if (objects.size() >= maxLimit)
-			{
-				spawn = GL_FALSE;
-			}
-			else if (objects.empty()) // spawns the first object
-			{
-				GLApp::GLObject obj{};
-				obj.init();
-				objects.emplace_back(obj);
-				++GLObject::objCount[obj.mdl_ref];
-			}
-			else
-			{
-				size_t size = objects.size();
-				for (size_t i{ 0 }; i < size; ++i)
-				{
-					GLApp::GLObject obj{};
-					obj.init();
-					objects.emplace_back(obj);
-					++GLObject::objCount[obj.mdl_ref];
-				}
-			}
-		}
+		glClearColor(1.f, 1.f, 1.f, 1.f);
 		
-		// if spawn is false
-		if(!spawn)
+		// update camera
+		GLApp::camera2d.update(GLHelper::ptr_window);
+
+		// iterate through objects container
+		// for each object
+		for (auto it : objects)
 		{
-			// sets spawn to true if minLimit is reached
-			if (objects.size() == minLimit)
+			// call update except for camera object
+			if (it.first != "Camera")
 			{
-				spawn = GL_TRUE;
-				GLApp::GLObject obj{};
-				obj.init();
-				objects.emplace_back(obj);
-				++GLObject::objCount[obj.mdl_ref];
-			}
-			else
-			{
-				size_t size = objects.size();
-				for (size_t i{ 0 }; i < size/2; ++i)
-				{
-					--GLObject::objCount[objects.front().mdl_ref];
-					objects.pop_front();
-				}
+				it.second.update(GLHelper::delta_time);
 			}
 		}
-
-		GLHelper::leftclickState = GL_FALSE;
-	}
-
-	// Part 3:
-	// for each object in container GLApp::objects
-	// Update object's orientation
-	// A more elaborate implementation would animate the object's movement
-	// A much more elaborate implementation would animate the object's size
-	// Using updated attributes, compute world-to-ndc transformation matrix
-	for (auto& tmp : objects)
-	{
-		tmp.update(GLHelper::delta_time);
-	}
 }
 
 /*  _________________________________________________________________________ */
@@ -253,7 +134,7 @@ void GLApp::draw()
 	// see sample executable for example ...
 	std::stringstream title;
 
-	title << "Tutorial 3 | Brandon Ho Jun Jie | " << "Obj: " << objects.size() << " | "
+	title << "Tutorial 4 | Brandon Ho Jun Jie | " << "Obj: " << objects.size() << " | "
 											      << "Box: " << GLObject::objCount[0] << " | "
 												  << "Mystery: " << GLObject::objCount[1] << " | "
 												  << std::setprecision(2) << std::fixed << GLHelper::fps;
@@ -263,33 +144,9 @@ void GLApp::draw()
 	// clear back buffer
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	// Part 3: Special rendering modes
-	// Use status of flag GLHelper::keystateP to set appropriate polygon
-	// rasterization mode using glPolygonMode
-	// if rendering GL_POINT, control diameter of rasterized points
-	// using glPointSize
-	// if rendering GL_LINE, control width of rasterized lines
-	// using glLineWidth
-	GLint polygonMode{};
-	glGetIntegerv(GL_POLYGON_MODE, &polygonMode);
-
-	switch (polygonMode)
-	{
-	case GL_LINE:
-		glLineWidth(5.f);
-		break;
-	case GL_POINT:
-		glPointSize(10.f);
-		break;
-	default:
-		glLineWidth(1.f);
-		glPointSize(1.f);
-		break;
-	}
-
 	// Part 4: Render each object in container GLApp::objects
 	for (auto const& x : GLApp::objects) {
-		x.draw(); // call member function GLObject::draw()
+		x.second.draw(); // call member function GLObject::draw()
 	}
 }
 
@@ -412,12 +269,11 @@ void GLApp::init_scene(std::string scene_filename)
 		obj.mdl_ref = models.find(model_name);
 
 		// set shd_ref to point to shader program
-		obj.shd_ref = models.find(shdr_pgm_name);
+		obj.shd_ref = shdrpgms.find(shdr_pgm_name);
 
 		// insert instantiated object into objects container
 		objects[object_name] = obj;		
 	}
-
 }
 
 /*  _________________________________________________________________________ */
@@ -525,73 +381,6 @@ void GLApp::init_models_cont(std::string model_filename)
 	models[model_name] = model; // insert model into map with key model_name
 }
 
-/*  _________________________________________________________________________ */
-/*! GLApp::box_model()
- * @brief Create a model representing a square.
- *
- * This function creates a model representing a square by generating vertex and
- * index data, creating a VAO to encapsulate the vertex data, and returning an
- * initialized instance of GLApp::GLModel.
- *
- * @param none
- * @return GLApp::GLModel The created square model.
-*/
-GLApp::GLModel GLApp::box_model()
-{
-	std::vector<glm::vec2> pos_vtx{
-		glm::vec2(0.5f, -0.5f), glm::vec2(0.5f, 0.5f),
-		glm::vec2(-0.5f, 0.5f), glm::vec2(-0.5f, -0.5f)
-	};
-
-	std::vector<glm::vec3> clr_vtx{
-		randColor(),randColor(),
-		randColor(),randColor()
-	};
-
-	std::vector<GLushort> idx_vtx{ 0,1,2,2,3,0 };
-
-	// Step 3: Generate a VAO handle to encapsulate the VBO(s) and
-	// state of this triangle mesh
-	// define VAO handle
-	GLuint vbo_hdl;
-	glCreateBuffers(1, &vbo_hdl);
-	glNamedBufferStorage(vbo_hdl, sizeof(glm::vec2) * pos_vtx.size() + sizeof(glm::vec3) * clr_vtx.size(),
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glNamedBufferSubData(vbo_hdl, 0,
-		sizeof(glm::vec2) * pos_vtx.size(), pos_vtx.data());
-	glNamedBufferSubData(vbo_hdl, sizeof(glm::vec2) * pos_vtx.size(),
-		sizeof(glm::vec3) * clr_vtx.size(), clr_vtx.data());
-
-	GLuint vaoid;
-	glCreateVertexArrays(1, &vaoid);
-	glEnableVertexArrayAttrib(vaoid, 0);
-	glVertexArrayVertexBuffer(vaoid, 0, vbo_hdl, 0, sizeof(glm::vec2));
-	glVertexArrayAttribFormat(vaoid, 0, 2, GL_FLOAT, GL_FALSE, 0);
-	glVertexArrayAttribBinding(vaoid, 0, 0);
-
-	glEnableVertexArrayAttrib(vaoid, 1);
-	glVertexArrayVertexBuffer(vaoid, 1, vbo_hdl,
-		sizeof(glm::vec2) * pos_vtx.size(), sizeof(glm::vec3));
-	glVertexArrayAttribFormat(vaoid, 1, 3, GL_FLOAT, GL_FALSE, 0);
-	glVertexArrayAttribBinding(vaoid, 1, 1);
-
-	GLuint ebo_hdl;
-	glCreateBuffers(1, &ebo_hdl);
-	glNamedBufferStorage(ebo_hdl, sizeof(GLushort) * idx_vtx.size(),
-		reinterpret_cast<GLvoid*>(idx_vtx.data()),
-		GL_DYNAMIC_STORAGE_BIT);
-	glVertexArrayElementBuffer(vaoid, ebo_hdl);
-	glBindVertexArray(0);
-
-	GLApp::GLModel mdl{};
-	mdl.vaoid = vaoid; // set up VAO same as in GLApp::points_model
-	mdl.primitive_type = GL_TRIANGLES;
-	mdl.draw_cnt = idx_vtx.size(); // number of vertices
-	mdl.primitive_cnt = mdl.draw_cnt / 3; // number of primitives (not used)
-
-	// Step 4: Return an appropriately initialized instance of GLApp::GLModel
-	return mdl;
-}
 
 /*  _________________________________________________________________________ */
 /*! GLApp::GLObject::draw
@@ -611,19 +400,32 @@ void GLApp::GLObject::draw() const
 {
 	// there are many shader programs initialized - here we're saying
 	// which specific shader program should be used to render geometry
-	shdrpgms[shd_ref].Use();
+	shd_ref->second.Use();
 
 	// there are many models, each with their own initialized VAO object
 	// here, we're saying which VAO's state should be used to set up pipe
-	glBindVertexArray(models[mdl_ref].vaoid);
+	glBindVertexArray(mdl_ref->second.vaoid);
+
+	// copy object color to fragment shader
+	GLint uniform_var_col_loc = glGetUniformLocation(shd_ref->second.GetHandle(),
+												 "uColor");
+
+	if (uniform_var_col_loc >= 0)
+	{
+		glUniform3fv(uniform_var_col_loc, 1, glm::value_ptr(color));
+	}
+	else
+	{
+		std::cout << "Uniform variable doesn't exist!!!\n";
+		std::exit(EXIT_FAILURE);
+	}
 
 	// Copy object 3x3 model-to-NDC matrix to vertex shader
-	GLint uniform_var_loc1 = glGetUniformLocation(GLApp::shdrpgms[shd_ref].GetHandle(),
+	GLint uniform_var_mtx_loc = glGetUniformLocation(shd_ref->second.GetHandle(),
 												  "uModel_to_NDC");
-
-	if (uniform_var_loc1 >= 0)
+	if (uniform_var_mtx_loc >= 0)
 	{
-		glUniformMatrix3fv(uniform_var_loc1, 1, GL_FALSE,
+		glUniformMatrix3fv(uniform_var_mtx_loc, 1, GL_FALSE,
 						   glm::value_ptr(GLApp::GLObject::mdl_to_ndc_xform));
 	}
 	else
@@ -637,117 +439,12 @@ void GLApp::GLObject::draw() const
 	// the graphics driver knows where to get the indices because the VAO
 	// containing this state information has been made current ...
 
-	glDrawElements(models[mdl_ref].primitive_type, models[mdl_ref].draw_cnt, GL_UNSIGNED_SHORT, NULL);
+	glDrawElements(mdl_ref->second.primitive_type, mdl_ref->second.draw_cnt, GL_UNSIGNED_SHORT, NULL);
 	// after completing the rendering, we tell the driver that VAO
 	// vaoid and current shader program are no longer current
 
 	glBindVertexArray(0);
-	shdrpgms[shd_ref].UnUse();
-}
-
-/*  _________________________________________________________________________ */
-/*! GLApp::mystery_model()
- * @brief Create a model representing a mystery shape.
- *
- * This function creates a model representing a mystery shape by generating
- * vertex and index data, creating a VAO to encapsulate the vertex data,
- * and returning an initialized instance of GLApp::GLModel.
- *
- * @param none
- * @return GLApp::GLModel The created mystery shape model.
-*/
-GLApp::GLModel GLApp::mystery_model()
-{
-	std::vector<glm::vec2> pos_vtx{
-		glm::vec2(-0.25f, -0.5f), glm::vec2(0.3f, 0.1f),
-		glm::vec2(-0.1f, -0.1f), glm::vec2(0.f, 0.1f),
-		glm::vec2(-0.3f, -0.1f), glm::vec2(0.2f,0.5f),
-		glm::vec2(-0.1f,0.5f)
-	};
-
-	std::vector<glm::vec3> clr_vtx{ 
-		randColor(),randColor(),
-		randColor(),randColor(),
-		randColor(),randColor(),
-		randColor()
-	};
-
-	std::vector<GLushort> idx_vtx{ 0,1,2,2,1,3,3,5,6,6,4,3,3,4,2 };
-
-	// Step 3: Generate a VAO handle to encapsulate the VBO(s) and
-	// state of this triangle mesh
-	// define VAO handle
-	GLuint vbo_hdl;
-	glCreateBuffers(1, &vbo_hdl);
-	glNamedBufferStorage(vbo_hdl, sizeof(glm::vec2) * pos_vtx.size() + sizeof(glm::vec3) * clr_vtx.size(),
-		nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glNamedBufferSubData(vbo_hdl, 0,
-		sizeof(glm::vec2) * pos_vtx.size(), pos_vtx.data());
-	glNamedBufferSubData(vbo_hdl, sizeof(glm::vec2) * pos_vtx.size(),
-		sizeof(glm::vec3) * clr_vtx.size(), clr_vtx.data());
-
-	GLuint vaoid;
-	glCreateVertexArrays(1, &vaoid);
-	glEnableVertexArrayAttrib(vaoid, 0);
-	glVertexArrayVertexBuffer(vaoid, 0, vbo_hdl, 0, sizeof(glm::vec2));
-	glVertexArrayAttribFormat(vaoid, 0, 2, GL_FLOAT, GL_FALSE, 0);
-	glVertexArrayAttribBinding(vaoid, 0, 0);
-
-	glEnableVertexArrayAttrib(vaoid, 1);
-	glVertexArrayVertexBuffer(vaoid, 1, vbo_hdl,
-		sizeof(glm::vec2) * pos_vtx.size(), sizeof(glm::vec3));
-	glVertexArrayAttribFormat(vaoid, 1, 3, GL_FLOAT, GL_FALSE, 0);
-	glVertexArrayAttribBinding(vaoid, 1, 1);
-
-	GLuint ebo_hdl;
-	glCreateBuffers(1, &ebo_hdl);
-	glNamedBufferStorage(ebo_hdl, sizeof(GLushort) * idx_vtx.size(),
-		reinterpret_cast<GLvoid*>(idx_vtx.data()),
-		GL_DYNAMIC_STORAGE_BIT);
-	glVertexArrayElementBuffer(vaoid, ebo_hdl);
-	glBindVertexArray(0);
-
-	GLApp::GLModel mdl{};
-	mdl.vaoid = vaoid; // set up VAO same as in GLApp::points_model
-	mdl.primitive_type = GL_TRIANGLES;
-	mdl.draw_cnt = idx_vtx.size(); // number of vertices
-	mdl.primitive_cnt = mdl.draw_cnt; // number of primitives (not used)
-
-	// Step 4: Return an appropriately initialized instance of GLApp::GLModel
-	return mdl;
-}
-
-/*  _________________________________________________________________________ */
-/*! GLApp::GLObject::init()
- * @brief Initialize the GLObject.
- *
- * This function initializes the GLObject by assigning random values to its
- * member variables such as mdl_ref, position, scaling, angle_disp, and angle_speed.
- *
- * @param none
- * @return void
-*/
-void GLApp::GLObject::init()
-{
-	// get uniformed distribution for 0 and 1
-	std::uniform_int_distribution<> intDis(0, 1);
-	
-	mdl_ref = intDis(gen);
-	shd_ref = 0;
-
-	double const worldRange{ 5000.0 };
-
-	// position of the object in game world in the range [-5000,5000]
-	position = glm::vec2(urdf(gen) * worldRange,
-						 urdf(gen) * worldRange);
-
-	// non-uniform scaling of the object from in the range [50.0,400.0]
-	scaling = glm::vec2(((urdf(gen) + 1.f) / 2.f) * (400.f - 50.f) + 50.f,
-						((urdf(gen) + 1.f) / 2.f) * (400.f - 50.f) + 50.f);
-
-	// initialize initial angular displacement and angular speed of the object
-	angle_disp = urdf(gen) * 360.f;
-	angle_speed = urdf(gen) * 30.f;	
+	shd_ref->second.UnUse();
 }
 
 /*  _________________________________________________________________________ */
@@ -769,8 +466,9 @@ void GLApp::GLObject::update(GLdouble delta_time)
 		0.f, 0.f, 1.f
 	};
 
-	angle_disp += angle_speed * static_cast<float>(delta_time);
-	float angleRadians{ glm::radians<float>(angle_disp) };
+
+	orientation.x += orientation.y * static_cast<float>(delta_time);
+	float angleRadians{ glm::radians<float>(orientation.x) };
 
 	glm::mat3 rotMat{
 		glm::cos(angleRadians), glm::sin(angleRadians), 0.f,
@@ -792,4 +490,55 @@ void GLApp::GLObject::update(GLdouble delta_time)
 
 	// matrix to map geometry from model to world to NDC coordinates
 	mdl_to_ndc_xform = modelMat * (transMat * (rotMat * scaleMat));
+}
+
+// HEADER***
+void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
+{
+	// assign address of object with object named "Camera" in std::map
+	// container GLApp::objects
+	pgo = ptr;
+
+	// compute camera window's aspect ratio
+	GLsizei fb_width, fb_height;
+	glfwGetFramebufferSize(pWindow, &fb_width, &fb_height);
+	ar = static_cast<GLfloat>(fb_width) / fb_height;
+
+	// compute camera up and right vectors
+	right = glm::vec2{ glm::cos(pgo->orientation.x),
+					   glm::sin(pgo->orientation.x)};
+
+	up = glm::vec2{ -glm::sin(pgo->orientation.x),
+					 glm::cos(pgo->orientation.x) };
+
+	// at startup, camera must be initialized to free camera
+	view_xform = glm::mat3{
+		1.f, 0.f, 0.f,
+		0.f, 1.f, 0.f,
+		-pgo->position.x, -pgo->position.y, 1.f
+	};
+
+	// compute other matrices
+	camwin_to_ndc_xform = glm::mat3{
+		2.f / (ar * height), 0.f, 0.f,
+		0.f, 2.f / height, 0.f,
+		0.f, 0.f, 1.f
+	};
+
+	world_to_ndc_xform = camwin_to_ndc_xform * view_xform;
+}
+
+void GLApp::Camera2D::update(GLFWwindow* pWindow)
+{
+	// check keyboard button presses to enable camera interactivity
+	// update camera aspect ratio - this must be done every frame
+	// because it is possible for the user to change viewport
+	// dimensions
+	// update camera's orientation (if required)
+	// update camera's up and right vectors (if required)
+	// update camera's position (if required)
+	// implement camera's zoom effect (if required)
+	// compute appropriate world-to-camera view transformation matrix
+	// compute window-to-NDC transformation matrix
+	// compute world-to-NDC transformation matrix
 }
