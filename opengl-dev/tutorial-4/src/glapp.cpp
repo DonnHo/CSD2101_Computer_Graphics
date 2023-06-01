@@ -593,14 +593,8 @@ void GLApp::Camera2D::update(GLFWwindow* pWindow)
 	// implement camera's zoom effect (if required)
 	if (zoom_flag)
 	{
-		if (height <= min_height) {
-			height_chg_dir = 1;
-		}
-		else if (height >= max_height) {
-			height_chg_dir = -1;
-		}
-
-		height += height_chg_dir * height_chg_val;
+		height_chg_dir = (height <= min_height ? 1 : (height >= max_height ? -1 : height_chg_dir));
+		height += height_chg_val * height_chg_dir;
 	}
 
 	// compute appropriate world-to-camera view transformation matrix
