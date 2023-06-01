@@ -95,7 +95,7 @@ void GLApp::update()
 
 		// iterate through objects container
 		// for each object
-		for (auto it : objects)
+		for (auto& it : objects)
 		{
 			// call update except for camera object
 			if (it.first != "Camera")
@@ -144,9 +144,14 @@ void GLApp::draw()
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	// Part 4: Render each object in container GLApp::objects
-	for (auto const& x : GLApp::objects) {
-		x.second.draw(); // call member function GLObject::draw()
+	for (auto const& x : objects) {
+		if (x.first != "Camera")
+		{
+			x.second.draw(); // call member function GLObject::draw()
+		}
 	}
+
+	objects["Camera"].draw();
 }
 
 /*  _________________________________________________________________________ */
@@ -329,7 +334,7 @@ void GLApp::init_models_cont(std::string model_filename)
 		case 'f':
 			model.primitive_type = GL_TRIANGLE_FAN;
 
-			if (!idx_vtx.empty()) // if index array is empty
+			if (idx_vtx.empty()) // if index array is empty
 			{
 				GLushort idx1, idx2, idx3;
 				line_iss >> idx1 >> idx2 >> idx3;
@@ -425,7 +430,7 @@ void GLApp::GLObject::draw() const
 	if (uniform_var_mtx_loc >= 0)
 	{
 		glUniformMatrix3fv(uniform_var_mtx_loc, 1, GL_FALSE,
-						   glm::value_ptr(GLApp::GLObject::mdl_to_ndc_xform));
+						   glm::value_ptr(this->mdl_to_ndc_xform));
 	}
 	else
 	{
@@ -498,12 +503,13 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 	glfwGetFramebufferSize(pWindow, &fb_width, &fb_height);
 	ar = static_cast<GLfloat>(fb_width) / fb_height;
 
+	float angleRadians{ glm::radians<float>(pgo->orientation.x) };
 	// compute camera up and right vectors
-	right = glm::vec2{ glm::cos(pgo->orientation.x),
-					   glm::sin(pgo->orientation.x)};
+	right = glm::vec2{ glm::cos(angleRadians),
+					   glm::sin(angleRadians)};
 
-	up = glm::vec2{ -glm::sin(pgo->orientation.x),
-					 glm::cos(pgo->orientation.x) };
+	up = glm::vec2{ -glm::sin(angleRadians),
+					 glm::cos(angleRadians) };
 
 	// at startup, camera must be initialized to free camera
 	view_xform = glm::mat3{
@@ -525,14 +531,88 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 void GLApp::Camera2D::update(GLFWwindow* pWindow)
 {
 	// check keyboard button presses to enable camera interactivity
-	// update camera aspect ratio - this must be done every frame
+	(GLHelper::keystateV == GL_TRUE) ? camtype_flag = GL_TRUE : camtype_flag = GL_FALSE;
+	(GLHelper::keystateZ == GL_TRUE) ? zoom_flag = GL_TRUE : zoom_flag = GL_FALSE;
+	(GLHelper::keystateH == GL_TRUE) ? left_turn_flag = GL_TRUE : left_turn_flag = GL_FALSE;
+	(GLHelper::keystateK == GL_TRUE) ? right_turn_flag = GL_TRUE : right_turn_flag = GL_FALSE;
+	(GLHelper::keystateU == GL_TRUE) ? move_flag = GL_TRUE : move_flag = GL_FALSE;
+
+	// update camera aspect ratio - this must be done every frame	
 	// because it is possible for the user to change viewport
 	// dimensions
+	GLsizei fb_width, fb_height;
+	glfwGetFramebufferSize(pWindow, &fb_width, &fb_height);
+	ar = static_cast<GLfloat>(fb_width) / fb_height;
+	
 	// update camera's orientation (if required)
+	if (left_turn_flag)
+	{
+		pgo->orientation.x += pgo->orientation.y;
+	}
+	
+	if (right_turn_flag)
+	{
+		pgo->orientation.x -= pgo->orientation.y;
+	}
+
 	// update camera's up and right vectors (if required)
+	if (left_turn_flag || right_turn_flag)
+	{
+		float angleRadians{ glm::radians<float>(pgo->orientation.x) };
+		right = glm::vec2{ glm::cos(angleRadians),
+					   glm::sin(angleRadians) };
+
+		up = glm::vec2{ -glm::sin(angleRadians),
+						 glm::cos(angleRadians) };
+	}
+
 	// update camera's position (if required)
+	if (move_flag)
+	{
+		pgo->position += linear_speed * up;
+	}
+
+	// update camera type
+	if (camtype_flag)
+	{
+		view_xform = glm::mat3{
+			right.x, up.x, 0.f,
+			right.y, up.y, 0.f,
+			glm::dot(-right, pgo->position), glm::dot(-up, pgo->position), 1.f
+		};
+	}
+	else
+	{
+		view_xform = glm::mat3{
+			1.f, 0.f, 0.f,
+			0.f, 1.f, 0.f,
+			-pgo->position.x, -pgo->position.y, 1.f
+		};
+	}
+
 	// implement camera's zoom effect (if required)
+	if (zoom_flag)
+	{
+		if (height <= min_height) {
+			height_chg_dir = 1;
+		}
+		else if (height >= max_height) {
+			height_chg_dir = -1;
+		}
+
+		height += height_chg_dir * height_chg_val;
+	}
+
 	// compute appropriate world-to-camera view transformation matrix
 	// compute window-to-NDC transformation matrix
 	// compute world-to-NDC transformation matrix
+	pgo->update(GLHelper::delta_time);
+
+	camwin_to_ndc_xform = glm::mat3{
+		2.f / (ar * height), 0.f, 0.f,
+		0.f, 2.f / height, 0.f,
+		0.f, 0.f, 1.f
+	};
+
+	world_to_ndc_xform = camwin_to_ndc_xform * view_xform;
 }

@@ -48,7 +48,11 @@ struct GLHelper
   static GLFWwindow *ptr_window;
 
   // this flag is true if button P was toggled from released position to pressed
-  static GLboolean keystateP;
+  static GLboolean keystateH;
+  static GLboolean keystateK;
+  static GLboolean keystateU;
+  static GLboolean keystateV;
+  static GLboolean keystateZ;
 
   // this flag is true if left mouse button is clicked
   static GLboolean leftclickState;
