@@ -65,15 +65,13 @@ struct GLApp {
 	  glm::vec3 color; 	          // color of object	 
 	  glm::mat3 mdl_to_ndc_xform; // model-to-ndc transformation 
 	  glm::mat3 mdl_xform;		  // model-to-world transformation
+	  glm::mat3 mdl_to_map_xform;  // mini map
 
 	  // reference to model that object is an instance of
 	  std::map<std::string, GLApp::GLModel>::iterator mdl_ref;
 
 	  // reference to shader program used to render the model
 	  std::map<std::string, GLSLShader>::iterator shd_ref;
-
-	  // static data member to keep track of object count
-	  static std::vector<GLuint> objCount;
 
 	  // member functions defined in glapp.cpp
 
@@ -83,7 +81,7 @@ struct GLApp {
 	  // function to render object's model (specified by index mdl_ref)
 	  // uses model transformation matrix mdl_to_ndc_xform matrix
 	  // and shader program specified by index shd_ref
-	  void draw() const;
+	  void draw(GLboolean draw_map) const;
 
 	  // function to update the object's model transformation matrix
 	  void update(GLdouble delta_time);
@@ -102,6 +100,9 @@ struct GLApp {
 	  glm::vec2 cam_pos;
 	  GLfloat interpolation;
 	  GLboolean cam_follow;
+
+	  // mini map parameters
+	  glm::mat3 map_to_ndc_xform, world_map_to_ndc_xform;
 
 	  // window change parameters
 	  GLint min_height{ 500 }, max_height{ 2000 };

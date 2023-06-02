@@ -31,71 +31,7 @@ std::map<std::string, GLApp::GLModel> GLApp::models{};
 std::map<std::string, GLSLShader> GLApp::shdrpgms{};
 
 // static variables
-std::vector<GLuint> GLApp::GLObject::objCount(2); // count of box_model and mystery_model
 GLApp::Camera2D GLApp::camera2d{};
-
-// Bonus
-GLuint fbo; // frambuffer object ID
-GLuint renderTexture; // texture ID
-
-void initialize_motion_blur()
-{
-	// create frambuffer object
-	glGenFramebuffers(1, &fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-	// create the render texture
-	glGenTextures(1, &renderTexture);
-	glBindTexture(GL_TEXTURE_2D, renderTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GLHelper::width, GLHelper::height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTexture, 0);
-
-	// check framebuffer status
-	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-	if (status != GL_FRAMEBUFFER_COMPLETE)
-	{
-		std::cout << "ERROR: Unable to create frambuffer\n";
-		exit(EXIT_FAILURE);
-	}
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void render_motion_blur_scene()
-{
-	// bind the framebuffer
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-	// clear the framebuffer
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	// render scene here
-
-	// unbind framebuffer
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void render_motion_blur_effect()
-{
-	// enable additive blending
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE);
-
-	// render a full-screen quad with the accumulated texture
-	glBindTexture(GL_TEXTURE_2D, renderTexture);
-	glBegin(GL_QUADS);
-	glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
-	glTexCoord2f(1.0f, 0.0f); glVertex2f(1.0f, -1.0f);
-	glTexCoord2f(1.0f, 1.0f); glVertex2f(1.0f, 1.0f);
-	glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f, 1.0f);
-	glEnd();
-
-	// disable blending
-	glDisable(GL_BLEND);
-}
-
 
 /*  _________________________________________________________________________ */
 /*! GLApp::init
@@ -196,25 +132,44 @@ void GLApp::draw()
 	// see sample executable for example ...
 	std::stringstream title;
 
-	title << "Tutorial 4 | Brandon Ho Jun Jie | " << "Obj: " << objects.size() << " | "
-											      << "Box: " << GLObject::objCount[0] << " | "
-												  << "Mystery: " << GLObject::objCount[1] << " | "
-												  << std::setprecision(2) << std::fixed << GLHelper::fps;
+	title << "Tutorial 4 | Brandon Ho Jun Jie | Camera Position (" << std::setprecision(2) << std::fixed << camera2d.cam_pos.x << ", "
+		  << std::setprecision(2) << camera2d.cam_pos.y << ") | Orientation: " << std::setprecision(0) << camera2d.pgo->orientation.x
+		  << " degrees | Window height: " << camera2d.height << " | FPS: " << std::setprecision(2) << GLHelper::fps;
 	
 	glfwSetWindowTitle(GLHelper::ptr_window, title.str().c_str());
 
 	// clear back buffer
 	glClear(GL_COLOR_BUFFER_BIT);
 
+	// set full viewport size
+	glViewport(0, 0, GLHelper::width, GLHelper::height);
+
 	// Part 4: Render each object in container GLApp::objects
 	for (auto const& x : objects) {
 		if (x.first != "Camera")
 		{
-			x.second.draw(); // call member function GLObject::draw()
+			x.second.draw(GL_FALSE); // call member function GLObject::draw()
 		}
 	}
 
-	objects["Camera"].draw();
+	objects["Camera"].draw(GL_FALSE);
+
+	// set map viewport size
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(GLHelper::width - GLHelper::width / 4, 0, GLHelper::width / 4, GLHelper::height / 4);
+	glViewport(GLHelper::width - GLHelper::width / 4, 0, GLHelper::width / 4, GLHelper::height / 4);
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	for (auto const& x : objects) {
+		if (x.first != "Camera")
+		{
+			x.second.draw(GL_TRUE); // call member function GLObject::draw()
+		}
+	}
+
+	objects["Camera"].draw(GL_TRUE);
+	glDisable(GL_SCISSOR_TEST);
 }
 
 /*  _________________________________________________________________________ */
@@ -463,7 +418,7 @@ void GLApp::init_models_cont(std::string model_filename)
  * @param none
  * @return void
 */
-void GLApp::GLObject::draw() const
+void GLApp::GLObject::draw(GLboolean draw_map) const
 {
 	// there are many shader programs initialized - here we're saying
 	// which specific shader program should be used to render geometry
@@ -492,8 +447,16 @@ void GLApp::GLObject::draw() const
 												  "uModel_to_NDC");
 	if (uniform_var_mtx_loc >= 0)
 	{
-		glUniformMatrix3fv(uniform_var_mtx_loc, 1, GL_FALSE,
-						   glm::value_ptr(this->mdl_to_ndc_xform));
+		if (draw_map)
+		{
+			glUniformMatrix3fv(uniform_var_mtx_loc, 1, GL_FALSE,
+				glm::value_ptr(this->mdl_to_map_xform));
+		}
+		else
+		{
+			glUniformMatrix3fv(uniform_var_mtx_loc, 1, GL_FALSE,
+				glm::value_ptr(this->mdl_to_ndc_xform));
+		}
 	}
 	else
 	{
@@ -554,6 +517,9 @@ void GLApp::GLObject::update(GLdouble delta_time)
 	mdl_xform = transMat * (rotMat * scaleMat);
 
 	mdl_to_ndc_xform = camera2d.world_to_ndc_xform * mdl_xform;
+
+	// minimap
+	mdl_to_map_xform = camera2d.world_map_to_ndc_xform * mdl_xform;
 }
 
 // HEADER***
@@ -594,6 +560,16 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 	};
 
 	world_to_ndc_xform = camwin_to_ndc_xform * view_xform;
+
+	// compute mini map matrices
+	map_to_ndc_xform = glm::mat3{
+		2.f / (ar * max_height), 0.f, 0.f,
+		0.f, 2.f / max_height, 0.f,
+		0.f, 0.f, 1.f
+	};
+
+	world_map_to_ndc_xform = map_to_ndc_xform * view_xform;
+
 }
 
 void GLApp::Camera2D::update(GLFWwindow* pWindow)
@@ -616,11 +592,13 @@ void GLApp::Camera2D::update(GLFWwindow* pWindow)
 	if (left_turn_flag)
 	{
 		pgo->orientation.x += pgo->orientation.y * static_cast<float>(GLHelper::delta_time) * 150.f;
+		pgo->orientation.x = pgo->orientation.x >= 360.f ? 0.f : pgo->orientation.x;
 	}
 	
 	if (right_turn_flag)
 	{
 		pgo->orientation.x -= pgo->orientation.y * static_cast<float>(GLHelper::delta_time) * 150.f;
+		pgo->orientation.x = pgo->orientation.x <= -360.f ? 0.f : pgo->orientation.x;
 	}
 
 	// update camera's up and right vectors (if required)
