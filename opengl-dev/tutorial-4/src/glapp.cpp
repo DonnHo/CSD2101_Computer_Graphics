@@ -34,6 +34,69 @@ std::map<std::string, GLSLShader> GLApp::shdrpgms{};
 std::vector<GLuint> GLApp::GLObject::objCount(2); // count of box_model and mystery_model
 GLApp::Camera2D GLApp::camera2d{};
 
+// Bonus
+GLuint fbo; // frambuffer object ID
+GLuint renderTexture; // texture ID
+
+void initialize_motion_blur()
+{
+	// create frambuffer object
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+	// create the render texture
+	glGenTextures(1, &renderTexture);
+	glBindTexture(GL_TEXTURE_2D, renderTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GLHelper::width, GLHelper::height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderTexture, 0);
+
+	// check framebuffer status
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	if (status != GL_FRAMEBUFFER_COMPLETE)
+	{
+		std::cout << "ERROR: Unable to create frambuffer\n";
+		exit(EXIT_FAILURE);
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_motion_blur_scene()
+{
+	// bind the framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+	// clear the framebuffer
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// render scene here
+
+	// unbind framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_motion_blur_effect()
+{
+	// enable additive blending
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE);
+
+	// render a full-screen quad with the accumulated texture
+	glBindTexture(GL_TEXTURE_2D, renderTexture);
+	glBegin(GL_QUADS);
+	glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+	glTexCoord2f(1.0f, 0.0f); glVertex2f(1.0f, -1.0f);
+	glTexCoord2f(1.0f, 1.0f); glVertex2f(1.0f, 1.0f);
+	glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f, 1.0f);
+	glEnd();
+
+	// disable blending
+	glDisable(GL_BLEND);
+}
+
+
 /*  _________________________________________________________________________ */
 /*! GLApp::init
  * @brief Initialize the GLApp.
@@ -470,8 +533,10 @@ void GLApp::GLObject::update(GLdouble delta_time)
 		0.f, 0.f, 1.f
 	};
 
-
-	orientation.x += orientation.y * static_cast<float>(delta_time);
+	if (&objects["Camera"] != this)
+	{
+		orientation.x += orientation.y * static_cast<float>(delta_time);
+	}
 	float angleRadians{ glm::radians<float>(orientation.x) };
 
 	glm::mat3 rotMat{
@@ -503,6 +568,9 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 	glfwGetFramebufferSize(pWindow, &fb_width, &fb_height);
 	ar = static_cast<GLfloat>(fb_width) / fb_height;
 
+	// compute camera trap parameters
+	cam_pos = pgo->position;
+
 	float angleRadians{ glm::radians<float>(pgo->orientation.x) };
 	// compute camera up and right vectors
 	right = glm::vec2{ glm::cos(angleRadians),
@@ -515,7 +583,7 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 	view_xform = glm::mat3{
 		1.f, 0.f, 0.f,
 		0.f, 1.f, 0.f,
-		-pgo->position.x, -pgo->position.y, 1.f
+		-cam_pos.x, -cam_pos.y, 1.f
 	};
 
 	// compute other matrices
@@ -547,12 +615,12 @@ void GLApp::Camera2D::update(GLFWwindow* pWindow)
 	// update camera's orientation (if required)
 	if (left_turn_flag)
 	{
-		pgo->orientation.x += pgo->orientation.y;
+		pgo->orientation.x += pgo->orientation.y * static_cast<float>(GLHelper::delta_time) * 150.f;
 	}
 	
 	if (right_turn_flag)
 	{
-		pgo->orientation.x -= pgo->orientation.y;
+		pgo->orientation.x -= pgo->orientation.y * static_cast<float>(GLHelper::delta_time) * 150.f;
 	}
 
 	// update camera's up and right vectors (if required)
@@ -569,11 +637,15 @@ void GLApp::Camera2D::update(GLFWwindow* pWindow)
 	// update camera's position (if required)
 	if (move_flag)
 	{
-		pgo->position += linear_speed * up;
+		pgo->position += linear_speed * up * static_cast<float>(GLHelper::delta_time) * 150.f;
 	}
 
+	// hover camera
+	interpolation = static_cast<float>(GLHelper::delta_time);
+	cam_pos = (1 - interpolation) * cam_pos + interpolation * pgo->position ;
+
 	// update camera type
-	if (camtype_flag)
+	if (camtype_flag) // first-person
 	{
 		view_xform = glm::mat3{
 			right.x, up.x, 0.f,
@@ -581,12 +653,12 @@ void GLApp::Camera2D::update(GLFWwindow* pWindow)
 			glm::dot(-right, pgo->position), glm::dot(-up, pgo->position), 1.f
 		};
 	}
-	else
+	else // third-person with cam follow
 	{
 		view_xform = glm::mat3{
 			1.f, 0.f, 0.f,
 			0.f, 1.f, 0.f,
-			-pgo->position.x, -pgo->position.y, 1.f
+			-cam_pos.x, -cam_pos.y, 1.f
 		};
 	}
 

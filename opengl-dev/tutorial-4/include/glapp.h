@@ -98,9 +98,10 @@ struct GLApp {
 	  GLint height{ 1000 };
 	  GLfloat ar;
 
-	  // camera trap parameters
-	  glm::vec2 cam_trap;
-	  GLfloat border_width;
+	  // camera follow parameters
+	  glm::vec2 cam_pos;
+	  GLfloat interpolation;
+	  GLboolean cam_follow;
 
 	  // window change parameters
 	  GLint min_height{ 500 }, max_height{ 2000 };

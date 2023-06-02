@@ -100,8 +100,8 @@ The specific initialization of OpenGL state and geometry data is
 abstracted away in GLApp::init
 */
 static void init() {
-  // Part 1
-  if (!GLHelper::init(2400, 1350, "Tutorial 4")) {
+  // Part 1 //2400, 1350
+  if (!GLHelper::init(1600, 900, "Tutorial 4")) {
     std::cout << "Unable to create OpenGL context" << std::endl;
     std::exit(EXIT_FAILURE);
   }
