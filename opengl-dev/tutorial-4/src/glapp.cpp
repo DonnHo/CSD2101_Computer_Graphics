@@ -2,13 +2,18 @@
 * @file    glapp.cpp
 * @author  pghali@digipen.edu
 * @co-author brandonjunjie.ho@digipen.edu
-* @date    6/26/2023
+* @date    6/3/2023
 *
 * @brief This file implements functionality useful and necessary to build OpenGL
 *		 applications including use of external APIs such as GLFW to create a
 *		 window and start up an OpenGL context and to extract function pointers
 *		 to OpenGL implementations. Also contains functions that generates models
-*		 and objects to be displayed in the application.* 
+*		 and objects to be displayed in the application.
+* 
+* 		 Extra features: Smooth camera follow movement, smooth input system,
+*						 changed movement and rotation to time-based and added
+*						 a minimap view of the entire area on the bottom right
+*						 corner.
 *//*__________________________________________________________________________*/
 
 /*                                                                   includes
@@ -20,13 +25,13 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
-#include <random>
+#include <vector>
 #include <glm/gtc/type_ptr.inl> // for glm::value_ptr
 
 /*                                                   objects with file scope
 ----------------------------------------------------------------------------- */
 // defining singleton containers
-std::map<std::string, GLApp::GLObject> GLApp::objects{};
+std::map<std::string, GLApp::GLObject> GLApp::objects;
 std::map<std::string, GLApp::GLModel> GLApp::models{};
 std::map<std::string, GLSLShader> GLApp::shdrpgms{};
 
@@ -40,9 +45,8 @@ GLApp::Camera2D GLApp::camera2d{};
  * This function initializes the GLApp by performing the following tasks:
  * 1. Clears the color buffer to white using glClearColor.
  * 2. Sets the viewport to use the entire window.
- * 3. Creates shared shader programs from vertex and fragment shader files
- *    and inserts them into the GLApp::shdrpgms container.
- * 4. Creates different geometries and inserts them into the GLApp::models repository container.
+ * 3. Parses the scene file and stores models, shader programs and objects in containers.
+ * 4. Initializes the 2D camera.
  *
  * @param none
  * @return void
@@ -66,8 +70,6 @@ void GLApp::init()
 	// Part 4: initialize camera
 	GLApp::camera2d.init(GLHelper::ptr_window,
 						 &GLApp::objects.at("Camera"));
-
-	// Part 5: Print OpenGL context and GPU specs
 }
 
 /*  _________________________________________________________________________ */
@@ -75,13 +77,9 @@ void GLApp::init()
  * @brief Update the GLApp.
  *
  * This function updates the GLApp by performing the following tasks:
- * 1. Clears the color buffer to white using glClearColor.
- * 2. Updates the polygon rasterization mode based on the key 'P' press:
- *    - If 'P' is pressed, the polygon rasterization mode is updated.
- * 3. Spawns or kills objects based on the left mouse button press:
- *    - If the maximum object limit is not reached, new objects are spawned.
- *    - If the maximum object limit is reached, the oldest objects are killed.
- * 4. Updates the orientation and attributes of each object in the GLApp::objects container.
+ * 1. Updates the 2D camera using the GLHelper::ptr_window.
+ * 2. Iterates through the objects container and calls the update function for
+ *    each object, except for the camera object.
  *
  * @param none
  * @return void
@@ -109,31 +107,28 @@ void GLApp::update()
  * @brief Draw the GLApp.
  *
  * This function draws the GLApp by performing the following tasks:
- * 1. Writes the window title with information about the tutorial name, object count,
- *    box count, mystery model count, and current FPS.
- * 2. Clears the back buffer using glClear.
- * 3. Adjusts the diameter of rasterized points or width of rasterized lines based
- *  on the rendering mode.
- * 4. Renders each object in the GLApp::objects container by calling the member
- *    function GLObject::draw() for each object.
+ * 1. Writes the window title with various information.
+ * 2. Clears the back buffer.
+ * 3. Sets the full viewport size.
+ * 4. Renders each object in the GLApp::objects container, except for the camera object.
+ * 5. Renders the camera object.
+ * 6. Sets the map viewport size using GL_SCISSOR_TEST and glScissor.
+ * 7. Clears the color and depth buffers.
+ * 8. Renders each object in the GLApp::objects container, except for the camera object, in the map viewport.
+ * 9. Renders the camera object in the map viewport.
+ * 10. Disables GL_SCISSOR_TEST.
  *
  * @param none
  * @return void
 */
 void GLApp::draw()
 {
-	// Part 1: write window title with the following (see sample executable):
-	// tutorial name - this should be "Tutorial 3"
-	// object count - how many objects are being displayed?
-	// how many of these objects are boxes?
-	// and, how many of these objects are the mystery model?
-	// current fps
-	// separate each piece of information using " | "
-	// see sample executable for example ...
+	// write window title
 	std::stringstream title;
 
-	title << "Tutorial 4 | Brandon Ho Jun Jie | Camera Position (" << std::setprecision(2) << std::fixed << camera2d.cam_pos.x << ", "
-		  << std::setprecision(2) << camera2d.cam_pos.y << ") | Orientation: " << std::setprecision(0) << camera2d.pgo->orientation.x
+	title << "Tutorial 4 | Brandon Ho Jun Jie | Camera Position (" << std::setprecision(2)
+		  << std::fixed << camera2d.cam_pos.x << ", " << std::setprecision(2)
+		  << camera2d.cam_pos.y << ") | Orientation: " << std::setprecision(0) << camera2d.pgo->orientation.x
 		  << " degrees | Window height: " << camera2d.height << " | FPS: " << std::setprecision(2) << GLHelper::fps;
 	
 	glfwSetWindowTitle(GLHelper::ptr_window, title.str().c_str());
@@ -144,11 +139,11 @@ void GLApp::draw()
 	// set full viewport size
 	glViewport(0, 0, GLHelper::width, GLHelper::height);
 
-	// Part 4: Render each object in container GLApp::objects
-	for (auto const& x : objects) {
-		if (x.first != "Camera")
+	// Render each object in container GLApp::objects
+	for (auto const& obj : objects) {
+		if (obj.first != "Camera")
 		{
-			x.second.draw(GL_FALSE); // call member function GLObject::draw()
+			obj.second.draw(GL_FALSE); // call member function GLObject::draw()
 		}
 	}
 
@@ -156,15 +151,20 @@ void GLApp::draw()
 
 	// set map viewport size
 	glEnable(GL_SCISSOR_TEST);
+
+	// restricts rendering to designated area
 	glScissor(GLHelper::width - GLHelper::width / 4, 0, GLHelper::width / 4, GLHelper::height / 4);
+
+	// set viewport size to bottom right corner of the window
 	glViewport(GLHelper::width - GLHelper::width / 4, 0, GLHelper::width / 4, GLHelper::height / 4);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	for (auto const& x : objects) {
-		if (x.first != "Camera")
+	// Render each object again in the minimap area
+	for (auto const& obj : objects) {
+		if (obj.first != "Camera")
 		{
-			x.second.draw(GL_TRUE); // call member function GLObject::draw()
+			obj.second.draw(GL_TRUE); // call member function GLObject::draw()
 		}
 	}
 
@@ -186,17 +186,18 @@ void GLApp::cleanup()
 
 
 /*  _________________________________________________________________________ */
-/*! GLApp::init_shdrpgms_cont
- * @brief Initialize shader programs container.
+/*! GLApp::init_shdrpgms
+ * @brief Initialize shader programs.
  *
- * This function creates the shader programs from each pair of shader files
- * int vector vpss and inserts them in the container GLApp::shdrpgms.
+ * This function initializes shader programs by compiling, linking, and validating
+ * vertex and fragment shader files specified by the given names. It then adds the
+ * compiled, linked, and validated shader program to the GLApp::shdrpgms container.
  *
- * @param vpss[in] A vector of pairs containing the vertex and fragment shader file paths.
+ * @param[in] shdr_pgm_name The name of the shader program.
+ * @param[in] vtx_shdr_name The name of the vertex shader file.
+ * @param[in] frg_shdr_name The name of the fragment shader file.
  * @return void
 */
-
-// init_shdrpgms **HEADER
 void GLApp::init_shdrpgms(std::string shdr_pgm_name,
 	std::string vtx_shdr_name,
 	std::string frg_shdr_name)
@@ -220,7 +221,27 @@ void GLApp::init_shdrpgms(std::string shdr_pgm_name,
 	GLApp::shdrpgms[shdr_pgm_name] = shdr_pgm;
 }
 
-// init_scene **HEADER
+/*  _________________________________________________________________________ */
+/*! GLApp::init_scene
+*@brief Initialize the scene from a scene file.
+*
+* This function initializes the scene by reading and parsing a scene file.It reads
+* each object's parameters from the file and performs the following tasks:
+* 1. Instantiates a GLObject.
+* 2. Reads object parameters.
+* 3. If model name is not in the GLApp::models container, it adds the model by
+*    calling GLApp::init_models_cont().
+* 4. If shader program name is not in the GLApp::shdrpgms container, it adds the
+*    shader program by calling GLApp::init_shdrpgms().
+* 5. Sets the object's model reference (mdl_ref) to point to the corresponding
+*    model in the GLApp::models container.
+* 6. Sets the object's shader reference (shd_ref) to point to the corresponding
+*    shader program in the GLApp::shdrpgms container.
+* 7. Inserts the instantiated object into the GLApp::objects container.
+*
+* @param[in] scene_filename The name of the scene file.
+* @return void
+*/
 void GLApp::init_scene(std::string scene_filename)
 {
 	std::ifstream ifs{ scene_filename, std::ios::in };
@@ -300,11 +321,20 @@ void GLApp::init_scene(std::string scene_filename)
 
 /*  _________________________________________________________________________ */
 /*! GLApp::init_models_cont()
- * @brief Initialize the models container.
+ * @brief Initialize the models container from a model file.
  *
- * This function initializes the models container in GLApp by adding the box model and the mystery model.
+ * This function initializes the models container by reading and parsing a model file.
+ * It reads each vertex and index data from the file and performs the following tasks:
+ * 1. Reads the vertex and index data from the file.
+ * 2. Creates and stores the vertex buffer object (VBO) and vertex array object (VAO) for the model.
+ * 3. Generates a VAO handle to encapsulate the VBO(s) and state of this triangle mesh.
+ * 4. Defines the VAO handle, enables vertex array attribute 0, and sets up vertex attribute format and binding.
+ * 5. Creates and stores the element buffer object (EBO) for the model.
+ * 6. Binds the VAO and EBO to the vertex array.
+ * 7. Sets the VAO ID, draw count, and primitive count for the model.
+ * 8. Inserts the model into the GLApp::models container with the key model_name.
  *
- * @param none
+ * @param[in] model_filename The name of the model file.
  * @return void
 */
 void GLApp::init_models_cont(std::string model_filename)
@@ -321,35 +351,39 @@ void GLApp::init_models_cont(std::string model_filename)
 	ifs.seekg(0, std::ios::beg);
 
 	std::string line;
+	std::string model_name;
 	GLApp::GLModel model{};
 	std::vector<glm::vec2> pos_vtx;
 	std::vector<GLushort> idx_vtx;
 
-	std::string model_name;
+	// read each model parameters
 	while (std::getline(ifs, line))
 	{
 		std::istringstream line_iss{ line };
 		GLchar prefix;
 		
 		line_iss >> prefix;
-
+		
+		// checks for type of data to be read
 		switch(prefix)
 		{
-		case 'v':
+		case 'v': // vertex data
 			GLfloat x, y;
 			line_iss >> x >> y;
 			pos_vtx.emplace_back(glm::vec2{ x, y });
 			break;
-		case 't':
+		case 't': // triangle indices
 			model.primitive_type = GL_TRIANGLES;
 
-			GLushort idx1, idx2, idx3;
-			line_iss >> idx1 >> idx2 >> idx3;
-			idx_vtx.emplace_back(idx1);
-			idx_vtx.emplace_back(idx2);
-			idx_vtx.emplace_back(idx3);
+			{
+				GLushort idx1, idx2, idx3;
+				line_iss >> idx1 >> idx2 >> idx3;
+				idx_vtx.emplace_back(idx1);
+				idx_vtx.emplace_back(idx2);
+				idx_vtx.emplace_back(idx3);
+			}
 			break;
-		case 'f':
+		case 'f': // triangle fan indices
 			model.primitive_type = GL_TRIANGLE_FAN;
 
 			if (idx_vtx.empty()) // if index array is empty
@@ -367,7 +401,7 @@ void GLApp::init_models_cont(std::string model_filename)
 				idx_vtx.emplace_back(idx);
 			}
 			break;
-		case 'n':
+		case 'n': // name of model
 			line_iss >> model_name;
 			break;
 		}			
@@ -403,19 +437,81 @@ void GLApp::init_models_cont(std::string model_filename)
 	models[model_name] = model; // insert model into map with key model_name
 }
 
+/*  _________________________________________________________________________ */
+/*! GLApp::GLObject::update()
+ * @brief Update the object's transformation matrix based on the delta time.
+ *
+ * This method updates the object's transformation matrix based on the delta time.
+ * It performs the following tasks:
+ * 1. Constructs a scale matrix using the object's scaling factors.
+ * 2. Updates the object's orientation based on the delta time.
+ * 3. Constructs a rotation matrix using the updated orientation.
+ * 4. Constructs a translation matrix using the object's position.
+ * 5. Computes the model transformation matrix by multiplying the scale, rotation,
+ *    and translation matrices.
+ * 6. Computes the model-to-NDC transformation matrix by multiplying the world-to-NDC
+ *    transformation matrix of the 2D camera and the model transformation matrix.
+ * 7. Computes the model-to-map transformation matrix by multiplying the world-to-NDC
+ *    map transformation matrix of the 2D camera and the model transformation matrix.
+ *
+ * @param[in] delta_time The time difference between the current frame and the previous frame.
+ * @return void
+*/
+void GLApp::GLObject::update(GLdouble delta_time)
+{
+	// compute scale matrix
+	glm::mat3 scaleMat{
+		scaling.x, 0.f, 0.f,
+		0.f, scaling.y, 0.f,
+		0.f, 0.f, 1.f
+	};
+
+	// updates all objects orientation except for the Camera object
+	if (&objects["Camera"] != this)
+	{
+		orientation.x += orientation.y * static_cast<float>(delta_time);
+	}
+
+	float angleRadians{ glm::radians<float>(orientation.x) };
+
+	// compute rotation matrix
+	glm::mat3 rotMat{
+		glm::cos(angleRadians), glm::sin(angleRadians), 0.f,
+		-glm::sin(angleRadians), glm::cos(angleRadians), 0.f,
+		0.f, 0.f, 1.f
+	};
+	// compute translation matrix
+	glm::mat3 transMat{
+		1.f, 0.f, 0.f,
+		0.f, 1.f, 0.f,
+		position.x, position.y, 1.f
+	};
+
+	// compute model to world matrix
+	mdl_xform = transMat * (rotMat * scaleMat);
+
+	// compute model to ndc matrix
+	mdl_to_ndc_xform = camera2d.world_to_ndc_xform * mdl_xform;
+
+	// compute model to ndc using map view
+	mdl_to_map_xform = camera2d.world_map_to_ndc_xform * mdl_xform;
+}
 
 /*  _________________________________________________________________________ */
 /*! GLApp::GLObject::draw
- * @brief Draw the GLObject.
+ * @brief Draw the object using the specified shader program and VAO state.
  *
- * This function renders the GLObject by performing the following tasks:
- * 1. Sets the appropriate shader program for rendering the geometry.
- * 2. Sets up the vertex array object (VAO) for the GLObject.
- * 3. Copies the 3x3 model-to-NDC matrix to the vertex shader.
- * 4. Specifies the primitive type and the number of primitives to be rendered.
- * 5. Cleans up by unbinding the VAO and the shader program.
+ * This method is used to render the object using the specified shader program
+ * and vertex array object (VAO) state. It performs the following tasks:
+ * 1. Sets the specified shader program as the current shader program for rendering.
+ * 2. Sets the specified VAO's state as the current VAO state for rendering.
+ * 3. Copies the object's color to the fragment shader.
+ * 4. Copies the object's model-to-NDC (Normalized Device Coordinates) matrix to the vertex shader.
+ * 5. Calls the OpenGL `glDrawElements()` function to render the object.
+ * 6. Resets the current VAO and shader program states.
  *
- * @param none
+ * @param[in] draw_map A boolean value indicating whether to draw the object with
+ * the model-to-map transformation matrix or the model-to-NDC transformation matrix.
  * @return void
 */
 void GLApp::GLObject::draw(GLboolean draw_map) const
@@ -447,6 +543,7 @@ void GLApp::GLObject::draw(GLboolean draw_map) const
 												  "uModel_to_NDC");
 	if (uniform_var_mtx_loc >= 0)
 	{
+		// draws object with matrix depending on the viewport to render to
 		if (draw_map)
 		{
 			glUniformMatrix3fv(uniform_var_mtx_loc, 1, GL_FALSE,
@@ -468,61 +565,34 @@ void GLApp::GLObject::draw(GLboolean draw_map) const
 	// such primitives exist.
 	// the graphics driver knows where to get the indices because the VAO
 	// containing this state information has been made current ...
-
 	glDrawElements(mdl_ref->second.primitive_type, mdl_ref->second.draw_cnt, GL_UNSIGNED_SHORT, NULL);
+
 	// after completing the rendering, we tell the driver that VAO
 	// vaoid and current shader program are no longer current
-
 	glBindVertexArray(0);
 	shd_ref->second.UnUse();
 }
 
 /*  _________________________________________________________________________ */
-/*! GLApp::GLObject::update()
- * @brief Update the GLObject.
+/*! GLApp::Camera2D::init
+ * @brief Initialize the 2D camera with the provided parameters.
  *
- * This function updates the GLObject based on the given delta_time. It calculates
- * the transformation matrix (mdl_to_ndc_xform) of the object using its member 
- * variables such as scaling, position, angle_disp, and angle_speed.
+ * This method initializes the 2D camera with the provided parameters. It performs the following tasks:
+ * 1. Assigns the address of *ptr to pgo.
+ * 2. Computes the aspect ratio of the camera window based on the framebuffer size.
+ * 3. Computes the camera's up and right vectors based on the object's orientation.
+ * 4. Initializes the camera's view transformation matrix to a free camera position.
+ * 5. Computes the camera window to NDC (Normalized Device Coordinates) transformation matrix.
+ * 6. Computes the world to NDC transformation matrix by multiplying the camera window
+ *    to NDC transformation matrix and the view transformation matrix.
+ * 7. Computes the mini map to NDC transformation matrix.
+ * 8. Computes the world to NDC map transformation matrix by multiplying the mini map
+ *    to NDC transformation matrix and the view transformation matrix.
  *
- * @param delta_time The time difference since the last update.
+ * @param[in] pWindow A pointer to the GLFW window.
+ * @param[in] ptr A pointer to the GLObject representing the camera.
  * @return void
 */
-void GLApp::GLObject::update(GLdouble delta_time)
-{
-	glm::mat3 scaleMat{
-		scaling.x, 0.f, 0.f,
-		0.f, scaling.y, 0.f,
-		0.f, 0.f, 1.f
-	};
-
-	if (&objects["Camera"] != this)
-	{
-		orientation.x += orientation.y * static_cast<float>(delta_time);
-	}
-	float angleRadians{ glm::radians<float>(orientation.x) };
-
-	glm::mat3 rotMat{
-		glm::cos(angleRadians), glm::sin(angleRadians), 0.f,
-		-glm::sin(angleRadians), glm::cos(angleRadians), 0.f,
-		0.f, 0.f, 1.f
-	};
-
-	glm::mat3 transMat{
-		1.f, 0.f, 0.f,
-		0.f, 1.f, 0.f,
-		position.x, position.y, 1.f
-	};
-
-	mdl_xform = transMat * (rotMat * scaleMat);
-
-	mdl_to_ndc_xform = camera2d.world_to_ndc_xform * mdl_xform;
-
-	// minimap
-	mdl_to_map_xform = camera2d.world_map_to_ndc_xform * mdl_xform;
-}
-
-// HEADER***
 void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 {
 	// assign address of object with object named "Camera" in std::map
@@ -559,6 +629,7 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 		0.f, 0.f, 1.f
 	};
 
+	// compute world to ndc matrix
 	world_to_ndc_xform = camwin_to_ndc_xform * view_xform;
 
 	// compute mini map matrices
@@ -569,9 +640,29 @@ void GLApp::Camera2D::init(GLFWwindow* pWindow, GLObject* ptr)
 	};
 
 	world_map_to_ndc_xform = map_to_ndc_xform * view_xform;
-
 }
 
+/*  _________________________________________________________________________ */
+/*! GLApp::Camera2D::update
+ * @brief Update the 2D camera based on the current state and window parameters.
+ *
+ * This method updates the 2D camera based on the current state and window parameters.
+ * It performs the following tasks:
+ * 1. Checks the keyboard button presses to enable camera interactivity.
+ * 2. Updates the camera's aspect ratio based on the current framebuffer size.
+ * 3. Updates the camera's orientation if the left or right turn flags are set.
+ * 4. Updates the camera's up and right vectors if the left or right turn flags are set.
+ * 5. Updates the camera's position if the move flag is set.
+ * 6. Updates the camera's position for the follow camera effect.
+ * 7. Updates the camera's view transformation matrix based on the camera type
+ * 8. Implements the camera's zoom effect if the zoom flag is set.
+ * 9. Updates the camera's world-to-camera view transformation matrix, window-to-NDC
+ *    transformation matrix, and world-to-NDC transformation matrix.
+ * 10. Calls the `update()` method of the associated GLObject to update its transformation.
+ *
+ * @param[in] pWindow A pointer to the GLFW window.
+ * @return void
+*/
 void GLApp::Camera2D::update(GLFWwindow* pWindow)
 {
 	// check keyboard button presses to enable camera interactivity
@@ -618,7 +709,7 @@ void GLApp::Camera2D::update(GLFWwindow* pWindow)
 		pgo->position += linear_speed * up * static_cast<float>(GLHelper::delta_time) * 150.f;
 	}
 
-	// hover camera
+	// interpolates camera position to camera object position
 	interpolation = static_cast<float>(GLHelper::delta_time);
 	cam_pos = (1 - interpolation) * cam_pos + interpolation * pgo->position ;
 

@@ -1,7 +1,7 @@
 /*!
 @file    my-tutorial-4.frag
 @author  brandonjunjie.ho@digipen.edu
-@date    5/26/2023
+@date    6/3/2023
 
 @brief
 This file contains the code for the fragment shader.

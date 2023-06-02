@@ -2,7 +2,7 @@
 * @file    glhelper.cpp
 * @author  pghali@digipen.edu
 * @co-author brandonjunjie.ho@digipen.edu
-* @date    6/26/2023
+* @date    6/3/2023
 *
 * @brief This file implements functionality useful and necessary to build OpenGL
 *        applications including use of external APIs such as GLFW to create a
@@ -158,8 +158,8 @@ were held down
 
 This function is called when keyboard buttons are pressed.
 When the ESC key is pressed, the close flag of the window is set.
-When the P key is pressed, keystateP is set, when repeatedly pressed
-or released, keystateP is unset.
+When the key is pressed, its keystate is set and it is unset upon release.
+When the key V is pressed, its keystate is set, it will unset when pressed again.
 */
 void GLHelper::key_cb(GLFWwindow *pwin, int key, int scancode, int action, int mod) {
 

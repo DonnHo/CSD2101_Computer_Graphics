@@ -2,7 +2,7 @@
 * @file    glapp.h
 * @author  pghali@digipen.edu
 * @co-author brandonjunjie.ho@digipen.edu
-* @date    6/26/2023
+* @date    6/3/2023
 *
 * @brief This file contains the declaration of namespace GLApp that encapsulates the
 *		 functionality required to implement an OpenGL application including
@@ -11,8 +11,13 @@
 *		 configuring VAO to present the buffered geometry and index data to
 *		 vertex shaders,
 *		 configuring textures(in later labs),
-*		 configuring cameras(in later labs),
-*		 and transformations(in later labs).
+*		 configuring cameras,
+*		 and transformations.
+* 
+*		 Extra features: Smooth camera follow movement, smooth input system,
+*						 changed movement and rotation to time-based and added
+*						 a minimap view of the entire area on the bottom right
+*						 corner.
 *//*__________________________________________________________________________*/
 
 /*                                                                      guard
@@ -25,8 +30,6 @@
 #include <glslshader.h>
 #include <glhelper.h>
 #include <string>
-#include <vector>
-#include <list>
 #include <map>
 
 struct GLApp {
@@ -43,29 +46,25 @@ struct GLApp {
 	  GLuint primitive_cnt; // number of primitives drawn
 	  GLuint vaoid; // handle to VAO
 	  GLuint draw_cnt; // number of time draw calls made
-
-	  // didnt add
-	  //void init(); // read mesh data from file
-	  //void release(); // return buffers back to GPU
   };
 
-  // tutorial 3 - encapsulates state required to update
+  // encapsulates state required to update
   // and render an instance of a model
   struct GLObject {
 	  
 
-	  glm::vec2 orientation; 	  // orientation.x is angle_disp
-								  // orientation.y is angle_speed
-								  // angle_speed: rate of change of rotation angle per second
-								  // angle_disp: current absolute orientation angle
-								  // specified in degrees
+	  glm::vec2 orientation{ 0.f }; 	  // orientation.x is angle_disp
+										  // orientation.y is angle_speed
+										  // angle_speed: rate of change of rotation angle per second
+										  // angle_disp: current absolute orientation angle
+										  // specified in degrees
 
-	  glm::vec2 scaling;		  // scaling parameters
-	  glm::vec2 position;		  // position relative to world
-	  glm::vec3 color; 	          // color of object	 
-	  glm::mat3 mdl_to_ndc_xform; // model-to-ndc transformation 
-	  glm::mat3 mdl_xform;		  // model-to-world transformation
-	  glm::mat3 mdl_to_map_xform;  // mini map
+	  glm::vec2 scaling{ 0.f };			  // scaling parameters
+	  glm::vec2 position{ 0.f };		  // position relative to world
+	  glm::vec3 color{ 0.f }; 	          // color of object	 
+	  glm::mat3 mdl_to_ndc_xform{ 0.f };  // model-to-ndc transformation 
+	  glm::mat3 mdl_xform{ 0.f };		  // model-to-world transformation
+	  glm::mat3 mdl_to_map_xform{ 0.f };  // mini map view transformation
 
 	  // reference to model that object is an instance of
 	  std::map<std::string, GLApp::GLModel>::iterator mdl_ref;
@@ -74,9 +73,6 @@ struct GLApp {
 	  std::map<std::string, GLSLShader>::iterator shd_ref;
 
 	  // member functions defined in glapp.cpp
-
-	  // function to initialize object's state
-	  void init();
 
 	  // function to render object's model (specified by index mdl_ref)
 	  // uses model transformation matrix mdl_to_ndc_xform matrix
@@ -101,7 +97,7 @@ struct GLApp {
 	  GLfloat interpolation;
 	  GLboolean cam_follow;
 
-	  // mini map parameters
+	  // mini map matrices
 	  glm::mat3 map_to_ndc_xform, world_map_to_ndc_xform;
 
 	  // window change parameters
@@ -123,7 +119,6 @@ struct GLApp {
 	  GLboolean right_turn_flag{ GL_FALSE }; // button K
 	  GLboolean move_flag{ GL_FALSE };		 // button U
 
-	  // implement if needed
 	  void init(GLFWwindow* pWindow, GLObject* ptr);
 	  void update(GLFWwindow*);
   };

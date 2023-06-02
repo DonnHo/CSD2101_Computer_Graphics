@@ -2,7 +2,7 @@
 * @file    glhelper.h
 * @author  pghali@digipen.edu
 * @co-author brandonjunjie.ho@digipen.edu
-* @date    6/26/2023
+* @date    6/3/2023
 *
 * @brief This file contains the declaration of namespace Helper that encapsulates the
 *		 functionality required to create an OpenGL context using GLFW; use GLEW
@@ -47,7 +47,7 @@ struct GLHelper
   static std::string title;
   static GLFWwindow *ptr_window;
 
-  // this flag is true if button P was toggled from released position to pressed
+  // this flags are true if button was toggled from released position to pressed
   static GLboolean keystateH;
   static GLboolean keystateK;
   static GLboolean keystateU;
