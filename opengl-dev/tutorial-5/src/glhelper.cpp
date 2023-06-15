@@ -1,19 +1,22 @@
 /*!
-@file    glhelper.cpp
-@author  pghali@digipen.edu
-@date    10/11/2016
-
-This file implements functionality useful and necessary to build OpenGL
-applications including use of external APIs such as GLFW to create a
-window and start up an OpenGL context and use GLEW to extract function 
-pointers to OpenGL implementations.
-
+* @file    glhelper.cpp
+* @author  pghali@digipen.edu
+* @co-author brandonjunjie.ho@digipen.edu
+* @date    6/10/2023
+*
+* @brief This file implements functionality useful and necessary to build OpenGL
+*        applications including use of external APIs such as GLFW to create a
+*        window and start up an OpenGL context and use GLEW to extract function
+*        pointers to OpenGL implementations. Also contains functionality to handle
+*        user input.
 *//*__________________________________________________________________________*/
 
 /*                                                                   includes
 ----------------------------------------------------------------------------- */
 #include <glhelper.h>
 #include <iostream>
+
+#define UNREFERENCED_PARAMETER(P) (P);
 
 /*                                                   objects with file scope
 ----------------------------------------------------------------------------- */
@@ -24,6 +27,10 @@ GLdouble GLHelper::fps;
 GLdouble GLHelper::delta_time;
 std::string GLHelper::title;
 GLFWwindow* GLHelper::ptr_window;
+GLboolean GLHelper::keystateM = GL_FALSE;
+GLboolean GLHelper::keystateT = GL_FALSE;
+GLboolean GLHelper::keystateA = GL_FALSE;
+GLboolean GLHelper::leftclickState = GL_FALSE;
 
 /*  _________________________________________________________________________ */
 /*! init
@@ -42,69 +49,70 @@ false otherwise.
 Uses GLFW to create OpenGL context. GLFW's initialization follows from here:
 http://www.glfw.org/docs/latest/quick.html
 a window of size width x height pixels
-and its associated OpenGL context that matches a core profile that is 
+and its associated OpenGL context that matches a core profile that is
 compatible with OpenGL 4.5 and doesn't support "old" OpenGL, has 32-bit RGBA,
-double-buffered color buffer, 24-bit depth buffer and 8-bit stencil buffer 
+double-buffered color buffer, 24-bit depth buffer and 8-bit stencil buffer
 with each buffer of size width x height pixels
 */
 bool GLHelper::init(GLint w, GLint h, std::string t) {
-  GLHelper::width = w;
-  GLHelper::height = h;
-  GLHelper::title = t;
+    GLHelper::width = w;
+    GLHelper::height = h;
+    GLHelper::title = t;
 
-  // Part 1
-  if (!glfwInit()) {
-    std::cout << "GLFW init has failed - abort program!!!" << std::endl;
-    return false;
-  }
+    // Part 1
+    if (!glfwInit()) {
+        std::cout << "GLFW init has failed - abort program!!!" << std::endl;
+        return false;
+    }
 
-  // In case a GLFW function fails, an error is reported to callback function
-  glfwSetErrorCallback(GLHelper::error_cb);
+    // In case a GLFW function fails, an error is reported to callback function
+    glfwSetErrorCallback(GLHelper::error_cb);
 
-  // Before asking GLFW to create an OpenGL context, we specify the minimum constraints
-  // in that context:
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
-  glfwWindowHint(GLFW_RED_BITS, 8); glfwWindowHint(GLFW_GREEN_BITS, 8);
-  glfwWindowHint(GLFW_BLUE_BITS, 8); glfwWindowHint(GLFW_ALPHA_BITS, 8);
-  glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // window dimensions are static
+    // Before asking GLFW to create an OpenGL context, we specify the minimum constraints
+    // in that context:
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_RED_BITS, 8); glfwWindowHint(GLFW_GREEN_BITS, 8);
+    glfwWindowHint(GLFW_BLUE_BITS, 8); glfwWindowHint(GLFW_ALPHA_BITS, 8);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // window dimensions are static
 
-  GLHelper::ptr_window = glfwCreateWindow(width, height, title.c_str(), NULL, NULL);
-  if (!GLHelper::ptr_window) {
-    std::cerr << "GLFW unable to create OpenGL context - abort program\n";
-    glfwTerminate();
-    return false;
-  }
+    GLHelper::ptr_window = glfwCreateWindow(width, height, title.c_str(), NULL, NULL);
+    if (!GLHelper::ptr_window) {
+        std::cerr << "GLFW unable to create OpenGL context - abort program\n";
+        glfwTerminate();
+        return false;
+    }
 
-  glfwMakeContextCurrent(GLHelper::ptr_window);
+    glfwMakeContextCurrent(GLHelper::ptr_window);
 
-  glfwSetFramebufferSizeCallback(GLHelper::ptr_window, GLHelper::fbsize_cb);
-  glfwSetKeyCallback(GLHelper::ptr_window, GLHelper::key_cb);
-  glfwSetMouseButtonCallback(GLHelper::ptr_window, GLHelper::mousebutton_cb);
-  glfwSetCursorPosCallback(GLHelper::ptr_window, GLHelper::mousepos_cb);
-  glfwSetScrollCallback(GLHelper::ptr_window, GLHelper::mousescroll_cb);
+    glfwSetFramebufferSizeCallback(GLHelper::ptr_window, GLHelper::fbsize_cb);
+    glfwSetKeyCallback(GLHelper::ptr_window, GLHelper::key_cb);
+    glfwSetMouseButtonCallback(GLHelper::ptr_window, GLHelper::mousebutton_cb);
+    glfwSetCursorPosCallback(GLHelper::ptr_window, GLHelper::mousepos_cb);
+    glfwSetScrollCallback(GLHelper::ptr_window, GLHelper::mousescroll_cb);
 
-  // this is the default setting ...
-  glfwSetInputMode(GLHelper::ptr_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    // this is the default setting ...
+    glfwSetInputMode(GLHelper::ptr_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-  // Part 2: Initialize entry points to OpenGL functions and extensions
-  GLenum err = glewInit();
-  if (GLEW_OK != err) {
-    std::cerr << "Unable to initialize GLEW - error: "
-      << glewGetErrorString(err) << " abort program" << std::endl;
-    return false;
-  }
-  if (GLEW_VERSION_4_5) {
-    std::cout << "Using glew version: " << glewGetString(GLEW_VERSION) << std::endl;
-    std::cout << "Driver supports OpenGL 4.5\n" << std::endl;
-  } else {
-    std::cerr << "Driver doesn't support OpenGL 4.5 - abort program" << std::endl;
-    return false;
-  }
+    // Part 2: Initialize entry points to OpenGL functions and extensions
+    GLenum err = glewInit();
+    if (GLEW_OK != err) {
+        std::cerr << "Unable to initialize GLEW - error: "
+            << glewGetErrorString(err) << " abort program" << std::endl;
+        return false;
+    }
+    if (GLEW_VERSION_4_5) {
+        std::cout << "Using glew version: " << glewGetString(GLEW_VERSION) << std::endl;
+        std::cout << "Driver supports OpenGL 4.5\n" << std::endl;
+    }
+    else {
+        std::cerr << "Driver doesn't support OpenGL 4.5 - abort program" << std::endl;
+        return false;
+    }
 
-  return true;
+    return true;
 }
 
 
@@ -120,8 +128,8 @@ The only task is to have GLFW return resources back to the system and
 gracefully terminate.
 */
 void GLHelper::cleanup() {
-  // Part 1
-  glfwTerminate();
+    // Part 1
+    glfwTerminate();
 }
 
 /*  _________________________________________________________________________*/
@@ -149,25 +157,43 @@ were held down
 
 This function is called when keyboard buttons are pressed.
 When the ESC key is pressed, the close flag of the window is set.
+When the key is pressed, its keystate is set and it is unset upon release.
 */
-void GLHelper::key_cb(GLFWwindow *pwin, int key, int scancode, int action, int mod) {
-  if (GLFW_PRESS == action) {
-#ifdef _DEBUG
-    std::cout << "Key pressed" << std::endl;
-#endif
-  } else if (GLFW_REPEAT == action) {
-#ifdef _DEBUG
-    std::cout << "Key repeatedly pressed" << std::endl;
-#endif
-  } else if (GLFW_RELEASE == action) {
-#ifdef _DEBUG
-    std::cout << "Key released" << std::endl;
-#endif
-  }
+void GLHelper::key_cb(GLFWwindow* pwin, int key, int scancode, int action, int mod) {
 
-  if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action) {
-    glfwSetWindowShouldClose(pwin, GLFW_TRUE);
-  }
+    UNREFERENCED_PARAMETER(mod);
+    UNREFERENCED_PARAMETER(scancode);
+    UNREFERENCED_PARAMETER(pwin);
+
+    if (GLFW_PRESS == action)
+    {
+#ifdef _DEBUG
+        std::cout << "Key pressed" << std::endl;
+#endif
+        keystateM = (key == GLFW_KEY_M) ? GL_TRUE : keystateM;
+        keystateT = (key == GLFW_KEY_T) ? GL_TRUE : keystateT;
+        keystateA = (key == GLFW_KEY_A) ? GL_TRUE : keystateA;
+    }
+    else if (GLFW_REPEAT == action)
+    {
+#ifdef _DEBUG
+        std::cout << "Key repeatedly pressed" << std::endl;
+#endif
+
+    }
+    else if (GLFW_RELEASE == action)
+    {
+#ifdef _DEBUG
+        std::cout << "Key released" << std::endl;
+#endif
+        keystateM = (key == GLFW_KEY_M) ? GL_FALSE : keystateM;
+        keystateT = (key == GLFW_KEY_T) ? GL_FALSE : keystateT;
+        keystateA = (key == GLFW_KEY_A) ? GL_FALSE : keystateA;
+    }
+
+    if (GLFW_KEY_ESCAPE == key && GLFW_PRESS == action) {
+        glfwSetWindowShouldClose(pwin, GLFW_TRUE);
+    }
 }
 
 /*  _________________________________________________________________________*/
@@ -190,33 +216,40 @@ were held down
 
 @return none
 
-This function is called when mouse buttons are pressed.
+This function is called when mouse buttons are pressed
+When left mouse button is pressed, leftclickState is set.
 */
-void GLHelper::mousebutton_cb(GLFWwindow *pwin, int button, int action, int mod) {
-  switch (button) {
-  case GLFW_MOUSE_BUTTON_LEFT:
+void GLHelper::mousebutton_cb(GLFWwindow* pwin, int button, int action, int mod) {
+
+    UNREFERENCED_PARAMETER(mod);
+    UNREFERENCED_PARAMETER(pwin);
+    switch (button) {
+    case GLFW_MOUSE_BUTTON_LEFT:
 #ifdef _DEBUG
-    std::cout << "Left mouse button ";
+        std::cout << "Left mouse button ";
 #endif
-    break;
-  case GLFW_MOUSE_BUTTON_RIGHT:
+
+        leftclickState = GL_TRUE;
+        break;
+    case GLFW_MOUSE_BUTTON_RIGHT:
 #ifdef _DEBUG
-    std::cout << "Right mouse button ";
+        std::cout << "Right mouse button ";
 #endif
-    break;
-  }
-  switch (action) {
-  case GLFW_PRESS:
+        break;
+    }
+    switch (action) {
+    case GLFW_PRESS:
 #ifdef _DEBUG
-    std::cout << "pressed!!!" << std::endl;
+        std::cout << "pressed!!!" << std::endl;
 #endif
-    break;
-  case GLFW_RELEASE:
+        break;
+    case GLFW_RELEASE:
 #ifdef _DEBUG
-    std::cout << "released!!!" << std::endl;
+        std::cout << "released!!!" << std::endl;
 #endif
-    break;
-  }
+        leftclickState = GL_FALSE;
+        break;
+    }
 }
 
 /*  _________________________________________________________________________*/
@@ -236,9 +269,12 @@ new cursor y-coordinate, relative to the top edge of the client area
 This functions receives the cursor position, measured in screen coordinates but
 relative to the top-left corner of the window client area.
 */
-void GLHelper::mousepos_cb(GLFWwindow *pwin, double xpos, double ypos) {
+void GLHelper::mousepos_cb(GLFWwindow* pwin, double xpos, double ypos) {
+    UNREFERENCED_PARAMETER(pwin);
+    UNREFERENCED_PARAMETER(xpos);
+    UNREFERENCED_PARAMETER(ypos);
 #ifdef _DEBUG
-  std::cout << "Mouse cursor position: (" << xpos << ", " << ypos << ")" << std::endl;
+    std::cout << "Mouse cursor position: (" << xpos << ", " << ypos << ")" << std::endl;
 #endif
 }
 
@@ -260,10 +296,13 @@ This function is called when the user scrolls, whether with a mouse wheel or
 touchpad gesture. Although the function receives 2D scroll offsets, a simple
 mouse scroll wheel, being vertical, provides offsets only along the Y-axis.
 */
-void GLHelper::mousescroll_cb(GLFWwindow *pwin, double xoffset, double yoffset) {
+void GLHelper::mousescroll_cb(GLFWwindow* pwin, double xoffset, double yoffset) {
+    UNREFERENCED_PARAMETER(pwin);
+    UNREFERENCED_PARAMETER(xoffset);
+    UNREFERENCED_PARAMETER(yoffset);
 #ifdef _DEBUG
-  std::cout << "Mouse scroll wheel offset: ("
-    << xoffset << ", " << yoffset << ")" << std::endl;
+    std::cout << "Mouse scroll wheel offset: ("
+        << xoffset << ", " << yoffset << ")" << std::endl;
 #endif
 }
 
@@ -282,8 +321,10 @@ The error callback receives a human-readable description of the error and
 (when possible) its cause.
 */
 void GLHelper::error_cb(int error, char const* description) {
+    UNREFERENCED_PARAMETER(error);
+    UNREFERENCED_PARAMETER(description);
 #ifdef _DEBUG
-  std::cerr << "GLFW error: " << description << std::endl;
+    std::cerr << "GLFW error: " << description << std::endl;
 #endif
 }
 
@@ -304,13 +345,14 @@ Height in pixels of new window size
 This function is called when the window is resized - it receives the new size
 of the window in pixels.
 */
-void GLHelper::fbsize_cb(GLFWwindow *ptr_win, int width, int height) {
+void GLHelper::fbsize_cb(GLFWwindow* ptr_win, int w, int h) {
+    UNREFERENCED_PARAMETER(ptr_win);
 #ifdef _DEBUG
-  std::cout << "fbsize_cb getting called!!!" << std::endl;
+    std::cout << "fbsize_cb getting called!!!" << std::endl;
 #endif
-  // use the entire framebuffer as drawing region
-  glViewport(0, 0, width, height);
-  // later, if working in 3D, we'll have to set the projection matrix here ...
+    // use the entire framebuffer as drawing region
+    glViewport(0, 0, w, h);
+    // later, if working in 3D, we'll have to set the projection matrix here ...
 }
 
 /*  _________________________________________________________________________*/
@@ -326,30 +368,37 @@ to compute:
 2. the frames per second every "fps_calc_interval" seconds
 */
 void GLHelper::update_time(double fps_calc_interval) {
-  // get elapsed time (in seconds) between previous and current frames
-  static double prev_time = glfwGetTime();
-  double curr_time = glfwGetTime();
-  delta_time = curr_time - prev_time;
-  prev_time = curr_time;
+    // get elapsed time (in seconds) between previous and current frames
+    static double prev_time = glfwGetTime();
+    double curr_time = glfwGetTime();
+    delta_time = curr_time - prev_time;
+    prev_time = curr_time;
 
-  // fps calculations
-  static double count = 0.0; // number of game loop iterations
-  static double start_time = glfwGetTime();
-  // get elapsed time since very beginning (in seconds) ...
-  double elapsed_time = curr_time - start_time;
+    // fps calculations
+    static double count = 0.0; // number of game loop iterations
+    static double start_time = glfwGetTime();
+    // get elapsed time since very beginning (in seconds) ...
+    double elapsed_time = curr_time - start_time;
 
-  ++count;
+    ++count;
 
-  // update fps at least every 10 seconds ...
-  fps_calc_interval = (fps_calc_interval < 0.0) ? 0.0 : fps_calc_interval;
-  fps_calc_interval = (fps_calc_interval > 10.0) ? 10.0 : fps_calc_interval;
-  if (elapsed_time > fps_calc_interval) {
-    GLHelper::fps = count / elapsed_time;
-    start_time = curr_time;
-    count = 0.0;
-  }
+    // update fps at least every 10 seconds ...
+    fps_calc_interval = (fps_calc_interval < 0.0) ? 0.0 : fps_calc_interval;
+    fps_calc_interval = (fps_calc_interval > 10.0) ? 10.0 : fps_calc_interval;
+    if (elapsed_time > fps_calc_interval) {
+        GLHelper::fps = count / elapsed_time;
+        start_time = curr_time;
+        count = 0.0;
+    }
 }
 
+/*  _________________________________________________________________________*/
+/*! print_specs()
+
+@param none
+
+This function is used to print the specifications of the openGL application.
+*/
 void GLHelper::print_specs()
 {
     GLubyte const* str_ven = glGetString(GL_VENDOR);
